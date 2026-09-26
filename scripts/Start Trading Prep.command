@@ -1,8 +1,20 @@
 #!/bin/bash
-# Double-click this file to update, start, and open the Trading Prep dashboard.
+# Double-click this file to open the Trading Prep dashboard.
 
 PROJECT_DIR="$HOME/Project-1"
 cd "$PROJECT_DIR" || { echo "ERROR: could not find $PROJECT_DIR"; read -p "Press Enter to close..."; exit 1; }
+
+# If the always-on background service (scripts/service/install-service.sh) is
+# already running, this is instant — just open the browser, nothing to wait on.
+if curl -sf http://localhost:3000 > /dev/null 2>&1; then
+  open http://localhost:3000
+  exit 0
+fi
+
+echo "The background service isn't running (or isn't installed yet)."
+echo "Falling back to the old manual dev-server flow for this launch..."
+echo "(Run scripts/service/install-service.sh once to stop needing this fallback.)"
+echo ""
 
 echo "=================================================="
 echo "Checking for updates..."
