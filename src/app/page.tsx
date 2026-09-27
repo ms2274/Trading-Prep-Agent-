@@ -30,6 +30,7 @@ const STATUS_STYLE: Record<MarketStatus, { label: string; dot: string }> = {
 interface SymbolError {
   symbol: string;
   error: string;
+  at?: string;
 }
 
 // Replace sheets for symbols that just regenerated; keep the previous sheet
@@ -54,7 +55,10 @@ export default function Home() {
   useEffect(() => {
     fetch("/api/latest-prep")
       .then((res) => res.json())
-      .then((json) => setSheets((current) => current ?? json.sheets ?? []))
+      .then((json) => {
+        setSheets((current) => current ?? json.sheets ?? []);
+        setSymbolErrors((current) => (current.length > 0 ? current : json.errors ?? []));
+      })
       .catch((err) => setError(`Couldn't load the last saved prep sheet: ${err instanceof Error ? err.message : String(err)}`));
   }, []);
 
@@ -143,7 +147,8 @@ export default function Home() {
           )}
           {symbolErrors.map((e) => (
             <p key={e.symbol} className="mt-5 rounded-xl border border-rose-800 bg-rose-950/60 p-3 text-sm text-rose-200">
-              {e.symbol} failed to generate: {e.error}
+              <span className="font-semibold">{e.symbol} failed to generate</span>
+              {e.at && ` (${new Date(e.at).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })})`}: {e.error}
             </p>
           ))}
 
@@ -162,7 +167,7 @@ export default function Home() {
                 </p>
               </div>
             ) : tab === "today" ? (
-              <TodayTab sheets={sheets} />
+              <TodayTab sheets={sheets} missingSymbols={SYMBOLS.filter((sym) => !sheets.some((sh) => sh.output.symbol === sym))} />
             ) : (
               <AnalysisTab sheets={sheets} />
             )}

@@ -3,7 +3,7 @@ import { fetchSharedContext } from "@/lib/sharedContext";
 import { buildPrepSheetInput } from "@/lib/buildPrepSheetInput";
 import { generatePrepSheet } from "@/lib/claude";
 import { upsertPrepSheet } from "@/lib/supabase";
-import { saveLatestSheets, StoredSheet } from "@/lib/latestSheets";
+import { saveLatestSheets, StoredSheet, SymbolFailure } from "@/lib/latestSheets";
 import { appendHistory } from "@/lib/history";
 import { SYMBOLS } from "@/lib/symbols";
 
@@ -36,14 +36,16 @@ export async function POST() {
   );
 
   const sheets: StoredSheet[] = [];
-  const errors: { symbol: string; error: string }[] = [];
+  const errors: SymbolFailure[] = [];
+  const at = new Date().toISOString();
 
   settled.forEach((result, i) => {
     if (result.status === "fulfilled") {
       sheets.push(result.value);
     } else {
       const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
-      errors.push({ symbol: SYMBOLS[i], error: message });
+      console.error(`[${at}] ${SYMBOLS[i]} prep sheet failed:`, result.reason);
+      errors.push({ symbol: SYMBOLS[i], error: message, at });
     }
   });
 
@@ -55,7 +57,7 @@ export async function POST() {
     console.error("Failed to append scorecard history:", err);
   }
   try {
-    await saveLatestSheets(sheets);
+    await saveLatestSheets(sheets, errors);
   } catch (err) {
     console.error("Failed to save latest sheets to disk:", err);
   }

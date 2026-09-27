@@ -7,6 +7,6 @@ import { SYMBOLS } from "@/lib/symbols";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const sheets = await readLatestSheets(SYMBOLS);
-  return NextResponse.json({ sheets });
+  const { sheets, failures } = await readLatestSheets(SYMBOLS);
+  return NextResponse.json({ sheets, errors: failures });
 }

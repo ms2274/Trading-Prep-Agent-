@@ -98,7 +98,12 @@ changing it.
 13. **Unverified assumption:** FMP economic-calendar timestamps are treated
     as UTC. `npm run test:payload` prints the converted times — CPI/jobs
     report must show 08:30 ET, FOMC 14:00 ET. If not, fix `toEt` in `fmp.ts`.
-14. **Never echo API keys back in chat.** A key copied out of an assistant
+14. **A symbol that fails must stay visible.** Failures are logged to
+    `scripts/service/server.log` and saved in `latest-sheets.json`
+    (`failures`, cleared on that symbol's next success), so after reopening
+    the app shows why a symbol is missing instead of silently showing the
+    other one. To diagnose a failure, run `npm run test:claude` on the Mac.
+15. **Never echo API keys back in chat.** A key copied out of an assistant
    message once arrived corrupted. Have the user paste keys straight from
    the provider's dashboard into `.env.local`.
 

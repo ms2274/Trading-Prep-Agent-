@@ -289,10 +289,24 @@ function EventsCard({ sheet }: { sheet: StoredSheet }) {
   );
 }
 
-export function TodayTab({ sheets }: { sheets: StoredSheet[] }) {
+function MissingSymbolCard({ symbol }: { symbol: string }) {
+  return (
+    <section className="flex flex-col justify-center rounded-2xl border border-dashed border-rose-800/70 bg-rose-950/10 p-5">
+      <h2 className="text-2xl font-bold tracking-tight">{symbol}</h2>
+      <p className="text-sm text-slate-400">{SYMBOL_NAMES[symbol] ?? ""}</p>
+      <p className="mt-4 text-sm text-rose-200">No {symbol} prep sheet — the last refresh for it failed (reason shown above).</p>
+      <p className="mt-1 text-sm text-slate-400">Click Refresh Prep to try again.</p>
+    </section>
+  );
+}
+
+export function TodayTab({ sheets, missingSymbols = [] }: { sheets: StoredSheet[]; missingSymbols?: string[] }) {
   return (
     <div className="space-y-6">
       <div className="grid gap-6 xl:grid-cols-2">
+        {missingSymbols.map((symbol) => (
+          <MissingSymbolCard key={symbol} symbol={symbol} />
+        ))}
         {sheets.map((s) => (
           <SymbolCard key={s.output.symbol} sheet={s} />
         ))}

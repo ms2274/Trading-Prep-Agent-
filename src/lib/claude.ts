@@ -267,6 +267,7 @@ function computeRiskReward(play: OptionsPlayDraft): number | null {
 const MIN_RISK_REWARD = 3;
 const RISK_REWARD_EPSILON = 0.001;
 const MAX_ATTEMPTS = 5;
+const MAX_TOKENS = 4000;
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
@@ -349,7 +350,7 @@ async function callToolWithRetry<T>(
   for (let attempt = 1; attempt <= MAX_ATTEMPTS && draft === null; attempt++) {
     const message = await anthropic.messages.create({
       model: MODEL,
-      max_tokens: 4000,
+      max_tokens: MAX_TOKENS,
       system: PREP_SHEET_SYSTEM_PROMPT,
       tools: [tool],
       tool_choice: { type: "tool", name: tool.name },
@@ -361,8 +362,13 @@ async function callToolWithRetry<T>(
       (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
     );
 
+    if (message.stop_reason === "max_tokens") {
+      lastError = `Response was cut off at the ${MAX_TOKENS}-token limit on attempt ${attempt} (output too long)`;
+      continue;
+    }
+
     if (!toolUse) {
-      lastError = `No tool_use block in Claude response: ${raw.slice(0, 1000)}`;
+      lastError = `No tool_use block in Claude response (stop_reason ${message.stop_reason}): ${raw.slice(0, 1000)}`;
       continue;
     }
 

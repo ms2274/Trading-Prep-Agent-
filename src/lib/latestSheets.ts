@@ -8,6 +8,12 @@ export interface StoredSheet {
   generatedAt: string;
 }
 
+export interface SymbolFailure {
+  symbol: string;
+  error: string;
+  at: string;
+}
+
 // Bump when PrepSheetInput/PrepSheetOutput change shape, so a file written by
 // older code is ignored instead of crashing the dashboard render.
 const STORE_VERSION = 2;
@@ -15,6 +21,9 @@ const STORE_VERSION = 2;
 interface StoreFile {
   version: number;
   sheets: Record<string, StoredSheet>;
+  // Last refresh failure per symbol, cleared when that symbol next succeeds —
+  // so a failed symbol still explains itself after the app is reopened.
+  failures?: Record<string, SymbolFailure>;
 }
 
 // Kept on local disk rather than in Supabase: free-tier Supabase projects pause
@@ -31,14 +40,22 @@ async function readStore(): Promise<StoreFile> {
   return { version: STORE_VERSION, sheets: {} };
 }
 
-export async function readLatestSheets(symbols: string[]): Promise<StoredSheet[]> {
+export async function readLatestSheets(symbols: string[]): Promise<{ sheets: StoredSheet[]; failures: SymbolFailure[] }> {
   const store = await readStore();
-  return symbols.flatMap((s) => (store.sheets[s] ? [store.sheets[s]] : []));
+  return {
+    sheets: symbols.flatMap((s) => (store.sheets[s] ? [store.sheets[s]] : [])),
+    failures: symbols.flatMap((s) => (store.failures?.[s] ? [store.failures[s]] : [])),
+  };
 }
 
-export async function saveLatestSheets(sheets: StoredSheet[]): Promise<void> {
+export async function saveLatestSheets(sheets: StoredSheet[], failures: SymbolFailure[]): Promise<void> {
   const store = await readStore();
-  for (const sheet of sheets) store.sheets[sheet.output.symbol] = sheet;
+  store.failures = store.failures ?? {};
+  for (const sheet of sheets) {
+    store.sheets[sheet.output.symbol] = sheet;
+    delete store.failures[sheet.output.symbol];
+  }
+  for (const failure of failures) store.failures[failure.symbol] = failure;
 
   await fs.mkdir(path.dirname(STORE_PATH), { recursive: true });
   const tmpPath = `${STORE_PATH}.tmp`;
