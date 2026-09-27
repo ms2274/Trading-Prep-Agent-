@@ -255,18 +255,39 @@ const MIN_RISK_REWARD = 3;
 const RISK_REWARD_EPSILON = 0.001;
 const MAX_ATTEMPTS = 5;
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
 function isZoneArray(value: unknown): value is SupplyDemandZoneDetail[] {
   return (
     Array.isArray(value) &&
-    value.every(
-      (z) =>
-        typeof z === "object" &&
-        z !== null &&
-        typeof (z as Record<string, unknown>).low === "number" &&
-        typeof (z as Record<string, unknown>).high === "number" &&
-        typeof (z as Record<string, unknown>).strength === "string" &&
-        typeof (z as Record<string, unknown>).rationale === "string"
-    )
+    value.every((z) => {
+      if (typeof z !== "object" || z === null) return false;
+      const zone = z as Record<string, unknown>;
+      return (
+        isFiniteNumber(zone.low) &&
+        isFiniteNumber(zone.high) &&
+        (zone.strength === "strong" || zone.strength === "moderate") &&
+        typeof zone.rationale === "string"
+      );
+    })
+  );
+}
+
+function isOptionsPlay(value: unknown): value is OptionsPlayDraft {
+  if (typeof value !== "object" || value === null) return false;
+  const p = value as Record<string, unknown>;
+  return (
+    typeof p.title === "string" &&
+    (p.direction === "long" || p.direction === "short") &&
+    typeof p.strikeGuidance === "string" &&
+    typeof p.dteRange === "string" &&
+    isFiniteNumber(p.entryTrigger) &&
+    isFiniteNumber(p.stopPrice) &&
+    isFiniteNumber(p.targetPrice) &&
+    (p.grade === "A" || p.grade === "B" || p.grade === "C") &&
+    typeof p.rationale === "string"
   );
 }
 
@@ -297,7 +318,7 @@ function validatePlanDraft(draft: unknown): draft is PlanDraft {
     return false;
   }
 
-  if (!Array.isArray(d.optionsPlays)) return false;
+  if (!Array.isArray(d.optionsPlays) || !d.optionsPlays.every(isOptionsPlay)) return false;
 
   return true;
 }

@@ -63,7 +63,10 @@ export async function buildPrepSheetInput(
     getMonthlyBars(symbol),
   ]);
 
-  const lastSession1m = filterRegularSession(mostRecentSessionBars(oneMin));
+  // Filter to regular hours BEFORE picking the latest day: pre-market, the
+  // latest day has only pre-market bars, which would leave nothing behind.
+  const regular1m = filterRegularSession(oneMin);
+  const lastSession1m = mostRecentSessionBars(regular1m);
   const regular30m = filterRegularSession(thirtyMin);
 
   const timeframes: PrepSheetTimeframeLevels[] = [
@@ -79,17 +82,23 @@ export async function buildPrepSheetInput(
   const currentPrice = daily.length > 0 ? daily[daily.length - 1].c : 0;
   const ladder = buildSrLadder(currentPrice, minorTrend.swingHighs, minorTrend.swingLows);
 
-  const sessionDates = getRecentSessionDates(oneMin, 2);
-  const todayDate = sessionDates[sessionDates.length - 1];
-  const prevDayDate = sessionDates.length > 1 ? sessionDates[sessionDates.length - 2] : undefined;
+  // Regular-hours sessions only. "today" exists only once today's 9:30 open
+  // has printed; before that (or on a weekend) the latest session is the
+  // prior trading day.
+  const todayEt = easternDateString(Date.now());
+  const sessionDates = getRecentSessionDates(regular1m, 2);
+  const latestDate = sessionDates[sessionDates.length - 1];
+  const hasTodaySession = latestDate === todayEt;
+  const todayDate = hasTodaySession ? latestDate : undefined;
+  const prevDayDate = hasTodaySession ? sessionDates[sessionDates.length - 2] : latestDate;
 
   const sessionLevels: PrepSheetInput["sessionLevels"] = {};
   if (todayDate) {
-    const levels = computeSessionLevels(oneMin, todayDate);
+    const levels = computeSessionLevels(regular1m, todayDate);
     if (levels) sessionLevels.today = levels;
   }
   if (prevDayDate) {
-    const levels = computeSessionLevels(oneMin, prevDayDate);
+    const levels = computeSessionLevels(regular1m, prevDayDate);
     if (levels) sessionLevels.prevDay = levels;
   }
 
@@ -104,7 +113,7 @@ export async function buildPrepSheetInput(
 
   return {
     symbol,
-    date: easternDateString(Date.now()),
+    date: todayEt,
     currentPrice,
     vix: vix ? { price: vix.price, changePercent: vix.changePercent, regime: classifyVix(vix.price) } : null,
     trend: {

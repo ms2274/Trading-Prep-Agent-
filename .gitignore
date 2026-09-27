@@ -16,12 +16,6 @@ node_modules/
 *.log
 npm-debug.log*
 
-# Python (weather script)
-venv/
-__pycache__/
-*.pyc
-weather_email.log
-
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts

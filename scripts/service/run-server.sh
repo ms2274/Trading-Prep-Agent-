@@ -4,7 +4,7 @@
 # use install-service.sh once, and update-and-rebuild.sh to update.
 set -e
 
-PROJECT_DIR="$HOME/Project-1"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$PROJECT_DIR"
 
 # launchd runs with a minimal environment (no shell PATH), so locate node/npm
@@ -17,10 +17,9 @@ if [ -d "$HOME/.nvm/versions/node" ]; then
   fi
 fi
 
-# Clear a stuck port from a previous crash/run before (re)starting, same
-# defensive logic as the old dev launcher — launchd's KeepAlive will restart
-# this script if it dies, so a lingering process here would otherwise wedge
-# every future restart.
+# Clear a stuck port from a previous crash/run before (re)starting — launchd's
+# KeepAlive will restart this script if it dies, so a lingering process here
+# would otherwise wedge every future restart.
 for round in 1 2 3; do
   PIDS=$(lsof -ti:3000 -sTCP:LISTEN 2>/dev/null || true)
   if [ -z "$PIDS" ]; then break; fi
@@ -28,4 +27,6 @@ for round in 1 2 3; do
   sleep 1
 done
 
-exec npm start -- -p 3000
+# 127.0.0.1 only: Next.js otherwise listens on every network interface, which
+# lets anyone on the same Wi-Fi read the prep sheets and trigger paid API calls.
+exec npm start -- -p 3000 -H 127.0.0.1

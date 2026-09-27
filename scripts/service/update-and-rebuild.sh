@@ -1,9 +1,9 @@
 #!/bin/bash
-# Run this whenever you want to update to the latest code — NOT automatically
-# on every launch, since the server now runs continuously in the background.
+# Run this whenever you want to update to the latest code — pulls, rebuilds,
+# restarts the background server, and rebuilds the Trading Prep app.
 set -e
 
-PROJECT_DIR="$HOME/Project-1"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$PROJECT_DIR"
 
 BRANCH="claude/nextjs-trading-prep-build-2j3pfe"
@@ -22,7 +22,6 @@ if [ "$UPDATE_OK" = false ]; then
   echo "# UPDATE FAILED - you are running OLD code, not the latest #"
   echo "# Tell Claude this happened and paste everything above.    #"
   echo "############################################################"
-  read -p "Press Enter to close..."
   exit 1
 fi
 
@@ -40,7 +39,7 @@ launchctl kickstart -k "gui/$(id -u)/com.tradingprep.server"
 echo ""
 echo "Waiting for it to come back up..."
 COUNT=0
-until curl -sf http://localhost:3000 > /dev/null 2>&1; do
+until curl -sf http://127.0.0.1:3000 > /dev/null 2>&1; do
   sleep 1
   COUNT=$((COUNT + 1))
   if [ "$COUNT" -gt 30 ]; then
@@ -49,10 +48,10 @@ until curl -sf http://localhost:3000 > /dev/null 2>&1; do
     echo "# IT DIDN'T COME BACK UP. Check the log for errors:         #"
     echo "# $PROJECT_DIR/scripts/service/server.log"
     echo "############################################################"
-    read -p "Press Enter to close..."
     exit 1
   fi
 done
 
-echo "Done. Updated and running at http://localhost:3000"
-read -p "Press Enter to close..."
+bash "$PROJECT_DIR/scripts/app/build-app.sh"
+
+echo "Done. Updated and running at http://127.0.0.1:3000"
