@@ -18,8 +18,11 @@ changing it.
 
 ## Where things live
 
-- `src/app/page.tsx` — dashboard; `src/app/calculator/page.tsx` — standalone
-  risk/position-size calculator (no API calls)
+- `src/app/page.tsx` — app shell: sidebar tabs (Today / Analysis /
+  Calculator), header with market status + Refresh, data loading
+- `src/components/` — `TodayTab` (price cards, key takeaways/levels, game
+  plan, options plays), `AnalysisTab` (per-symbol deep read),
+  `CalculatorTab` (position sizing, no API calls), shared `ui.tsx`/`icons.tsx`
 - `src/app/api/refresh-prep/route.ts` — orchestrates a refresh for the
   symbols in `src/lib/symbols.ts`
 - `src/app/api/latest-prep/route.ts` + `src/lib/latestSheets.ts` — the
