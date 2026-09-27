@@ -34,9 +34,14 @@ is meant to be confirmed against live order flow in Bookmap.
 
 - Click **Trading Prep** in the Dock. It opens to the last generated sheets
   (marked "Not from today" if they're stale); click **Refresh Prep** for new ones.
-- **Today** tab: price, key takeaways, key levels, game plan, options plays.
-  **Analysis** tab: trend tiers, zones, full S/R ladder, volume profile,
-  session levels, VIX — one symbol at a time. **Calculator** tab: position sizing.
+- **Today** tab: price and pre-market range, event risk (economic releases and
+  mega-cap earnings over the next 10 days), key takeaways, key levels, game
+  plan, options plays. **Analysis** tab: trend tiers, zones, full S/R ladder,
+  volume profile, session levels, VIX — one symbol at a time. **Scorecard**
+  tab: how past plays actually played out, by grade. **Calculator** tab:
+  position sizing.
+- To price today's plays with real contracts, run `/size-plays` in Claude
+  Code inside this folder (needs the Robinhood MCP connected; read-only).
 - To update to the latest code: `bash scripts/service/update-and-rebuild.sh`
   (pulls, rebuilds, restarts the server, rebuilds the app).
 - To remove the background service: `bash scripts/service/uninstall-service.sh`.

@@ -1,19 +1,18 @@
 import { NextResponse } from "next/server";
-import { fetchVixQuote } from "@/lib/fmp";
-import { getUpcomingMarketHolidays } from "@/lib/polygon";
+import { fetchSharedContext } from "@/lib/sharedContext";
 import { buildPrepSheetInput } from "@/lib/buildPrepSheetInput";
 import { generatePrepSheet } from "@/lib/claude";
 import { upsertPrepSheet } from "@/lib/supabase";
 import { saveLatestSheets, StoredSheet } from "@/lib/latestSheets";
+import { appendHistory } from "@/lib/history";
 import { SYMBOLS } from "@/lib/symbols";
 
 export async function POST() {
-  const vix = await fetchVixQuote().catch(() => null);
-  const holidays = await getUpcomingMarketHolidays().catch(() => []);
+  const shared = await fetchSharedContext();
 
   const settled = await Promise.allSettled(
     SYMBOLS.map(async (symbol): Promise<StoredSheet> => {
-      const input = await buildPrepSheetInput(symbol, vix, holidays);
+      const input = await buildPrepSheetInput(symbol, shared);
       const { output, raw } = await generatePrepSheet(input);
 
       // Storage is a nice-to-have (history), not a reason to hide a
@@ -48,6 +47,13 @@ export async function POST() {
     }
   });
 
+  // History first: on its very first run it seeds from the previous latest
+  // sheets, which saveLatestSheets is about to overwrite.
+  try {
+    await appendHistory(sheets);
+  } catch (err) {
+    console.error("Failed to append scorecard history:", err);
+  }
   try {
     await saveLatestSheets(sheets);
   } catch (err) {

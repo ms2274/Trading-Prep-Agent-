@@ -19,10 +19,21 @@ changing it.
 ## Where things live
 
 - `src/app/page.tsx` — app shell: sidebar tabs (Today / Analysis /
-  Calculator), header with market status + Refresh, data loading
-- `src/components/` — `TodayTab` (price cards, key takeaways/levels, game
-  plan, options plays), `AnalysisTab` (per-symbol deep read),
-  `CalculatorTab` (position sizing, no API calls), shared `ui.tsx`/`icons.tsx`
+  Scorecard / Calculator), header with market status + Refresh, data loading
+- `src/components/` — `TodayTab` (price cards with pre-market context, event
+  risk, key takeaways/levels, game plan, options plays), `AnalysisTab`
+  (per-symbol deep read), `ScorecardTab`, `CalculatorTab` (position sizing,
+  no API calls), shared `ui.tsx`/`icons.tsx`
+- `src/lib/sharedContext.ts` — fetches what's shared by all symbols once per
+  refresh (VIX, holidays, economic + earnings calendars); each source fails
+  independently and records why
+- `src/lib/history.ts` + `src/lib/scorecard.ts` + `src/app/api/scorecard/` —
+  every refresh appends that day's plays/zones to `data/history.json`; the
+  Scorecard scores them on 5-min regular-hours bars over the next 5 sessions
+- `.claude/commands/size-plays.md` — `/size-plays` for the local Claude:
+  prices today's plays with real Robinhood contracts (read-only MCP calls)
+  and sizes them to the $20-50 rule. `.claude/settings.json` denies the
+  Robinhood order/cancel/exercise tools in this project.
 - `src/app/api/refresh-prep/route.ts` — orchestrates a refresh for the
   symbols in `src/lib/symbols.ts`
 - `src/app/api/latest-prep/route.ts` + `src/lib/latestSheets.ts` — the
@@ -31,8 +42,9 @@ changing it.
 - `src/lib/polygon.ts` — bars (1m/30m/4h/daily/weekly/monthly), holidays,
   regular-session helpers. Host `api.polygon.io` still works after the
   Massive rebrand — don't "fix" it.
-- `src/lib/fmp.ts` — VIX via FMP `/stable/quote` (`/api/v3/` is retired for
-  new accounts: a 403 "Legacy Endpoint" means someone reverted this)
+- `src/lib/fmp.ts` — FMP `/stable/` endpoints: VIX quote, economic calendar,
+  earnings calendar (`/api/v3/` is retired for new accounts: a 403 "Legacy
+  Endpoint" means someone reverted this)
 - `src/lib/buildPrepSheetInput.ts` — the one pipeline that turns raw bars into
   Claude's input; used by the route and `scripts/testClaude.ts`. Add new
   computed data here, not in callers.
@@ -80,7 +92,13 @@ changing it.
     ignored rather than crashing the render.
 11. **GET route handlers need `export const dynamic = "force-dynamic"`** in
     Next 14, or they're cached at build time and serve stale data forever.
-12. **Never echo API keys back in chat.** A key copied out of an assistant
+12. **Refresh writes history BEFORE saving latest sheets.** The first
+    history write seeds from the previous latest-sheets file; saving latest
+    first overwrote it and silently lost that sheet.
+13. **Unverified assumption:** FMP economic-calendar timestamps are treated
+    as UTC. `npm run test:payload` prints the converted times — CPI/jobs
+    report must show 08:30 ET, FOMC 14:00 ET. If not, fix `toEt` in `fmp.ts`.
+14. **Never echo API keys back in chat.** A key copied out of an assistant
    message once arrived corrupted. Have the user paste keys straight from
    the provider's dashboard into `.env.local`.
 
@@ -97,7 +115,9 @@ changing it.
   data-layer logic with synthetic bars (mock `fetch`), Claude-layer logic by
   stubbing `Anthropic.Messages.prototype.create` or with a real call, and UI
   with Playwright against a mocked `/api/refresh-prep`. macOS scripts can only
-  be syntax-checked there.
+  be syntax-checked there. `lsof` doesn't see every listener in that sandbox —
+  find stray servers with `pgrep -f "[n]ext-server"` (the brackets stop the
+  pattern matching, and killing, your own shell).
 
 ## Working with this user
 

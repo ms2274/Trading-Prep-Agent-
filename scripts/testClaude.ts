@@ -1,8 +1,7 @@
 import { config } from "dotenv";
 config({ path: ".env.local" });
 
-import { fetchVixQuote } from "../src/lib/fmp";
-import { getUpcomingMarketHolidays } from "../src/lib/polygon";
+import { fetchSharedContext } from "../src/lib/sharedContext";
 import { buildPrepSheetInput } from "../src/lib/buildPrepSheetInput";
 import { generatePrepSheet } from "../src/lib/claude";
 
@@ -11,17 +10,11 @@ const SYMBOL = "SPY";
 async function main() {
   console.log(`Building prep sheet input for ${SYMBOL}...\n`);
 
-  const vix = await fetchVixQuote().catch((err) => {
-    console.error("VIX fetch failed, continuing without it:", err.message);
-    return null;
-  });
+  const shared = await fetchSharedContext();
+  if (!shared.vix) console.error("VIX unavailable, continuing without it.");
+  shared.events.errors.forEach((e) => console.error(e));
 
-  const holidays = await getUpcomingMarketHolidays().catch((err) => {
-    console.error("Holidays fetch failed, continuing without them:", err.message);
-    return [];
-  });
-
-  const input = await buildPrepSheetInput(SYMBOL, vix, holidays);
+  const input = await buildPrepSheetInput(SYMBOL, shared);
 
   console.log("=== Input sent to Claude ===");
   console.log(JSON.stringify(input, null, 2));

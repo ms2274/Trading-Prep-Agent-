@@ -10,7 +10,7 @@ export interface StoredSheet {
 
 // Bump when PrepSheetInput/PrepSheetOutput change shape, so a file written by
 // older code is ignored instead of crashing the dashboard render.
-const STORE_VERSION = 1;
+const STORE_VERSION = 2;
 
 interface StoreFile {
   version: number;

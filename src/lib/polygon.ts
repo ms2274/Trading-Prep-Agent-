@@ -47,8 +47,16 @@ function easternMinutesSinceMidnight(epochMs: number): number {
 }
 
 export function isRegularSessionBar(bar: { t: number }): boolean {
+  return barPhase(bar) === "regular";
+}
+
+export type BarPhase = "premarket" | "regular" | "afterhours";
+
+export function barPhase(bar: { t: number }): BarPhase {
   const mins = easternMinutesSinceMidnight(bar.t);
-  return mins >= 9 * 60 + 30 && mins < 16 * 60;
+  if (mins < 9 * 60 + 30) return "premarket";
+  if (mins < 16 * 60) return "regular";
+  return "afterhours";
 }
 
 export function filterRegularSession<T extends { t: number }>(bars: T[]): T[] {

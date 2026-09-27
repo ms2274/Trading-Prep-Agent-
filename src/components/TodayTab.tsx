@@ -32,14 +32,25 @@ function LevelCell({ label, value }: { label: string; value: string }) {
   );
 }
 
+const PHASE_LABEL: Record<string, string> = {
+  premarket: "Pre-market",
+  regular: "Regular hours",
+  afterhours: "After hours",
+};
+
 function SymbolCard({ sheet }: { sheet: StoredSheet }) {
   const { input, output, generatedAt } = sheet;
   const bars = input.recentDailyBars;
-  const last = bars[bars.length - 1];
-  const prev = bars[bars.length - 2];
-  const change = last && prev ? last.c - prev.c : null;
-  const changePct = change !== null && prev ? (change / prev.c) * 100 : null;
+  const pc = input.priceContext;
+  const change = pc.changeFromPrevClose;
+  const changePct = pc.changeFromPrevClosePct;
   const up = (change ?? 0) >= 0;
+  const priceTime = new Date(pc.lastPriceTime).toLocaleString("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 
   const oneMin = input.timeframes.find((t) => t.label === "1m");
   const support = input.srLadder.support[0];
@@ -67,12 +78,22 @@ function SymbolCard({ sheet }: { sheet: StoredSheet }) {
           <span className={`text-sm font-medium ${up ? "text-emerald-400" : "text-rose-400"}`}>
             {up ? "▲" : "▼"} {up ? "+" : ""}
             {fmt(change)} ({up ? "+" : ""}
-            {changePct.toFixed(2)}%)
+            {changePct.toFixed(2)}%) <span className="font-normal text-slate-500">vs prior close</span>
           </span>
         )}
       </div>
+      <p className="mt-1 text-xs text-slate-400">
+        {PHASE_LABEL[pc.lastPricePhase]} · as of {priceTime} ET · ~15 min delayed
+      </p>
+      {pc.premarket && (
+        <p className="mt-2 inline-flex gap-3 rounded-lg border border-amber-800/60 bg-amber-950/30 px-2.5 py-1 font-mono text-xs text-amber-200">
+          <span className="font-sans text-amber-300">Pre-market</span>
+          <span>H {fmt(pc.premarket.high)}</span>
+          <span>L {fmt(pc.premarket.low)}</span>
+        </p>
+      )}
       <p className="mt-1 text-xs text-slate-500">
-        Updated {updated}
+        Sheet generated {updated}
         {!isFromToday && (
           <span className="ml-2 rounded-md border border-amber-800 bg-amber-950 px-1.5 py-0.5 text-amber-300">
             Not from today — refresh
@@ -190,6 +211,84 @@ function PlayCard({ symbol, play }: { symbol: string; play: OptionsPlay }) {
   );
 }
 
+function dayLabel(isoDate: string): string {
+  return new Date(`${isoDate}T12:00:00Z`).toLocaleDateString("en-US", {
+    timeZone: "UTC",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function timeLabel(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+}
+
+const TIMING_LABEL: Record<string, string> = { bmo: "before open", amc: "after close" };
+
+function EventsCard({ sheet }: { sheet: StoredSheet }) {
+  const { economic, earnings, errors } = sheet.input.events;
+  const today = sheet.output.date;
+
+  return (
+    <Card title="Event Risk · next 10 days" icon={<AlertIcon className="h-5 w-5 text-amber-400" />}>
+      <div className="grid gap-6 md:grid-cols-2">
+        <div>
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Economic releases (ET)</h4>
+          {economic === null ? (
+            <p className="text-sm text-amber-300">Couldn&apos;t load — check the calendar yourself today.</p>
+          ) : economic.length === 0 ? (
+            <p className="text-sm text-slate-500">No major US releases scheduled.</p>
+          ) : (
+            <ul className="space-y-2">
+              {economic.map((e, i) => (
+                <li key={i} className="flex gap-3 text-sm">
+                  <span className={`w-40 shrink-0 ${e.date === today ? "font-semibold text-amber-300" : "text-slate-400"}`}>
+                    {e.date === today ? "Today" : dayLabel(e.date)}
+                    {e.time && ` ${timeLabel(e.time)}`}
+                  </span>
+                  <span className="text-slate-200">{e.names.slice(0, 3).join(" · ")}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div>
+          <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Mega-cap earnings</h4>
+          {earnings === null ? (
+            <p className="text-sm text-amber-300">Couldn&apos;t load — check the calendar yourself today.</p>
+          ) : earnings.length === 0 ? (
+            <p className="text-sm text-slate-500">None of the index heavyweights report in this window.</p>
+          ) : (
+            <ul className="space-y-2">
+              {earnings.map((e, i) => (
+                <li key={i} className="flex gap-3 text-sm">
+                  <span className={`w-40 shrink-0 ${e.date === today ? "font-semibold text-amber-300" : "text-slate-400"}`}>
+                    {e.date === today ? "Today" : dayLabel(e.date)}
+                  </span>
+                  <span className="font-semibold text-slate-100">{e.symbol}</span>
+                  {e.timing && <span className="text-slate-500">{TIMING_LABEL[e.timing] ?? e.timing}</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+      {errors.length > 0 && (
+        <details className="mt-3">
+          <summary className="cursor-pointer text-xs text-slate-500">Why some data is missing</summary>
+          <ul className="mt-1 space-y-1 text-xs text-slate-500">
+            {errors.map((err, i) => (
+              <li key={i}>{err}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </Card>
+  );
+}
+
 export function TodayTab({ sheets }: { sheets: StoredSheet[] }) {
   return (
     <div className="space-y-6">
@@ -198,6 +297,8 @@ export function TodayTab({ sheets }: { sheets: StoredSheet[] }) {
           <SymbolCard key={s.output.symbol} sheet={s} />
         ))}
       </div>
+
+      {sheets[0] && <EventsCard sheet={sheets[0]} />}
 
       <div className="grid gap-6 xl:grid-cols-2">
         {sheets.map((s) => (

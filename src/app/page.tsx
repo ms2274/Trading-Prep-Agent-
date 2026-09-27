@@ -8,13 +8,15 @@ import { ET_DATE } from "@/components/ui";
 import { TodayTab } from "@/components/TodayTab";
 import { AnalysisTab } from "@/components/AnalysisTab";
 import { CalculatorTab } from "@/components/CalculatorTab";
-import { AnalysisIcon, CalculatorIcon, HomeIcon, LogoIcon, RefreshIcon } from "@/components/icons";
+import { ScorecardTab } from "@/components/ScorecardTab";
+import { AnalysisIcon, CalculatorIcon, HomeIcon, LogoIcon, RefreshIcon, TrophyIcon } from "@/components/icons";
 
-type Tab = "today" | "analysis" | "calculator";
+type Tab = "today" | "analysis" | "scorecard" | "calculator";
 
 const TABS: { id: Tab; label: string; Icon: typeof HomeIcon }[] = [
   { id: "today", label: "Today", Icon: HomeIcon },
   { id: "analysis", label: "Analysis", Icon: AnalysisIcon },
+  { id: "scorecard", label: "Scorecard", Icon: TrophyIcon },
   { id: "calculator", label: "Calculator", Icon: CalculatorIcon },
 ];
 
@@ -148,6 +150,8 @@ export default function Home() {
           <div className="mt-6">
             {tab === "calculator" ? (
               <CalculatorTab />
+            ) : tab === "scorecard" ? (
+              <ScorecardTab />
             ) : sheets === null ? (
               <p className="text-sm text-slate-500">Loading your last prep sheet…</p>
             ) : sheets.length === 0 ? (

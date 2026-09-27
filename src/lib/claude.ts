@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { PREP_SHEET_SYSTEM_PROMPT } from "../prompts/prepSheet";
+import type { EventCalendar } from "./sharedContext";
 
 const MODEL = "claude-sonnet-5";
 
@@ -56,10 +57,22 @@ export interface HolidayInput {
   status: string;
 }
 
+export interface PriceContextInput {
+  lastPrice: number;
+  lastPriceTime: string; // ISO; Polygon Starter data is ~15 min delayed
+  lastPricePhase: "premarket" | "regular" | "afterhours";
+  prevClose: number | null; // prior regular-session close
+  changeFromPrevClose: number | null;
+  changeFromPrevClosePct: number | null;
+  premarket: { high: number; low: number; volume: number } | null; // today's 4:00-9:30 ET
+}
+
 export interface PrepSheetInput {
   symbol: string;
   date: string;
   currentPrice: number;
+  priceContext: PriceContextInput;
+  events: EventCalendar;
   vix: { price: number; changePercent: number; regime: string } | null;
   trend: {
     primary: TrendTierInput;
