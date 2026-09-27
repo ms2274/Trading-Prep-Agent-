@@ -1,17 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import type { PrepSheetOutput, PrepSheetInput, TrendTierInput } from "@/lib/claude";
-
-interface Sheet {
-  input: PrepSheetInput;
-  output: PrepSheetOutput;
-}
+import type { TrendTierInput } from "@/lib/claude";
+import type { StoredSheet as Sheet } from "@/lib/latestSheets";
+import { SYMBOLS } from "@/lib/symbols";
 
 interface SymbolError {
   symbol: string;
   error: string;
+}
+
+const ET_DATE = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/New_York",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+// Replace sheets for symbols that just regenerated; keep the previous sheet
+// for any symbol that failed, so one failure doesn't blank its panel.
+function mergeSheets(previous: Sheet[], fresh: Sheet[]): Sheet[] {
+  const bySymbol = new Map(previous.map((s) => [s.output.symbol, s]));
+  for (const s of fresh) bySymbol.set(s.output.symbol, s);
+  return SYMBOLS.flatMap((symbol) => {
+    const sheet = bySymbol.get(symbol);
+    return sheet ? [sheet] : [];
+  });
 }
 
 export default function Home() {
@@ -20,6 +35,13 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    fetch("/api/latest-prep")
+      .then((res) => res.json())
+      .then((json) => setSheets((current) => current ?? json.sheets ?? []))
+      .catch((err) => setError(`Couldn't load the last saved prep sheet: ${err instanceof Error ? err.message : String(err)}`));
+  }, []);
+
   async function refreshPrep() {
     setLoading(true);
     setError(null);
@@ -27,7 +49,7 @@ export default function Home() {
       const res = await fetch("/api/refresh-prep", { method: "POST" });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? `Request failed (${res.status})`);
-      setSheets(json.sheets);
+      setSheets((current) => mergeSheets(current ?? [], json.sheets));
       setSymbolErrors(json.errors ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -67,6 +89,10 @@ export default function Home() {
           {e.symbol} failed to generate: {e.error}
         </p>
       ))}
+
+      {sheets && sheets.length === 0 && !loading && (
+        <p className="mt-8 text-sm text-neutral-500">No saved prep sheet yet — click Refresh Prep to generate one.</p>
+      )}
 
       {sheets && sheets.length > 0 && (
         <div className="mt-8 grid gap-8 lg:grid-cols-2">
@@ -127,14 +153,32 @@ function TrendTier({ label, tier }: { label: string; tier: TrendTierInput }) {
 }
 
 function PrepSheetCard({ sheet }: { sheet: Sheet }) {
-  const { input, output } = sheet;
+  const { input, output, generatedAt } = sheet;
+  const isFromToday = output.date === ET_DATE.format(new Date());
+  const generatedLabel = new Date(generatedAt).toLocaleString([], {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold">
-        {output.symbol} <span className="text-sm font-normal text-neutral-500">{output.date}</span>{" "}
-        <span className="font-mono text-sm text-neutral-400">${fmt(input.currentPrice)}</span>
-      </h2>
+      <div>
+        <h2 className="text-lg font-semibold">
+          {output.symbol} <span className="text-sm font-normal text-neutral-500">{output.date}</span>{" "}
+          <span className="font-mono text-sm text-neutral-400">${fmt(input.currentPrice)}</span>
+        </h2>
+        <p className="text-xs text-neutral-500">
+          Generated {generatedLabel}
+          {!isFromToday && (
+            <span className="ml-2 rounded border border-amber-800 bg-amber-950 px-1.5 py-0.5 text-amber-300">
+              Not from today — click Refresh Prep
+            </span>
+          )}
+        </p>
+      </div>
 
       <div className="rounded border border-red-900 bg-red-950/40 p-3">
         <h3 className="text-sm font-semibold text-red-400">Red Flags</h3>

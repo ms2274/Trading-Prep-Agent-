@@ -2,23 +2,23 @@ import { NextResponse } from "next/server";
 import { fetchVixQuote } from "@/lib/fmp";
 import { getUpcomingMarketHolidays } from "@/lib/polygon";
 import { buildPrepSheetInput } from "@/lib/buildPrepSheetInput";
-import { generatePrepSheet, PrepSheetInput, PrepSheetOutput } from "@/lib/claude";
+import { generatePrepSheet } from "@/lib/claude";
 import { upsertPrepSheet } from "@/lib/supabase";
-
-const SYMBOLS = ["SPY", "QQQ"];
+import { saveLatestSheets, StoredSheet } from "@/lib/latestSheets";
+import { SYMBOLS } from "@/lib/symbols";
 
 export async function POST() {
   const vix = await fetchVixQuote().catch(() => null);
   const holidays = await getUpcomingMarketHolidays().catch(() => []);
 
   const settled = await Promise.allSettled(
-    SYMBOLS.map(async (symbol) => {
+    SYMBOLS.map(async (symbol): Promise<StoredSheet> => {
       const input = await buildPrepSheetInput(symbol, vix, holidays);
       const { output, raw } = await generatePrepSheet(input);
 
       // Storage is a nice-to-have (history), not a reason to hide a
       // successfully generated sheet from the user — never let a Supabase
-      // problem (wrong project, schema drift, network hiccup) masquerade
+      // problem (paused project, schema drift, network hiccup) masquerade
       // as a generation failure.
       try {
         await upsertPrepSheet({
@@ -32,11 +32,11 @@ export async function POST() {
         console.error(`Failed to save ${symbol} prep sheet to Supabase:`, err);
       }
 
-      return { input, output };
+      return { input, output, generatedAt: new Date().toISOString() };
     })
   );
 
-  const sheets: { input: PrepSheetInput; output: PrepSheetOutput }[] = [];
+  const sheets: StoredSheet[] = [];
   const errors: { symbol: string; error: string }[] = [];
 
   settled.forEach((result, i) => {
@@ -47,6 +47,12 @@ export async function POST() {
       errors.push({ symbol: SYMBOLS[i], error: message });
     }
   });
+
+  try {
+    await saveLatestSheets(sheets);
+  } catch (err) {
+    console.error("Failed to save latest sheets to disk:", err);
+  }
 
   return NextResponse.json({ sheets, errors });
 }

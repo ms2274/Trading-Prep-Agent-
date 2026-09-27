@@ -20,7 +20,11 @@ changing it.
 
 - `src/app/page.tsx` — dashboard; `src/app/calculator/page.tsx` — standalone
   risk/position-size calculator (no API calls)
-- `src/app/api/refresh-prep/route.ts` — orchestrates a refresh for SPY and QQQ
+- `src/app/api/refresh-prep/route.ts` — orchestrates a refresh for the
+  symbols in `src/lib/symbols.ts`
+- `src/app/api/latest-prep/route.ts` + `src/lib/latestSheets.ts` — the
+  dashboard opens to the last generated sheets, saved in
+  `data/latest-sheets.json` (gitignored, local disk)
 - `src/lib/polygon.ts` — bars (1m/30m/4h/daily/weekly/monthly), holidays,
   regular-session helpers. Host `api.polygon.io` still works after the
   Massive rebrand — don't "fix" it.
@@ -33,7 +37,8 @@ changing it.
   computation, no I/O
 - `src/lib/claude.ts` + `src/prompts/prepSheet.ts` — Claude layer, model
   `claude-sonnet-5`
-- `src/lib/supabase.ts` — stores each sheet; `SCHEMA_SQL` has the table DDL
+- `src/lib/supabase.ts` — history log of every sheet; `SCHEMA_SQL` has the
+  table DDL. Optional: nothing in the app reads from it.
 - `scripts/service/` — launchd background service (install / update /
   uninstall / the `run-server.sh` launchd executes)
 - `scripts/app/` — builds `~/Applications/Trading Prep.app` (icon, launcher)
@@ -64,7 +69,15 @@ changing it.
    anyone on the same Wi-Fi.
 8. **launchd and Dock-launched apps get a bare PATH** without Homebrew/nvm.
    Scripts that call `npm` must set PATH themselves (see `run-server.sh`).
-9. **Never echo API keys back in chat.** A key copied out of an assistant
+9. **Don't depend on Supabase for anything the dashboard needs.** The
+   free-tier project pauses after ~a week of inactivity and writes then fail
+   silently (by design). That's why the latest sheets live on local disk.
+10. **Bump `STORE_VERSION` in `latestSheets.ts` whenever the
+    PrepSheetInput/PrepSheetOutput shape changes**, so an old saved file is
+    ignored rather than crashing the render.
+11. **GET route handlers need `export const dynamic = "force-dynamic"`** in
+    Next 14, or they're cached at build time and serve stale data forever.
+12. **Never echo API keys back in chat.** A key copied out of an assistant
    message once arrived corrupted. Have the user paste keys straight from
    the provider's dashboard into `.env.local`.
 

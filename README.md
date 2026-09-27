@@ -16,7 +16,8 @@ is meant to be confirmed against live order flow in Bookmap.
 - Next.js 14 (App Router, TypeScript, Tailwind)
 - [Polygon.io / Massive](https://polygon.io) — OHLCV bars and market holidays (Stocks Starter plan)
 - [Financial Modeling Prep](https://site.financialmodelingprep.com/developer/docs) — VIX quote (free tier)
-- [Supabase](https://supabase.com) — stores each generated prep sheet
+- [Supabase](https://supabase.com) — optional history log of every sheet (the latest
+  sheets are kept on local disk in `data/`)
 - Anthropic Claude — writes the prep sheet from the computed levels
 
 ## First-time setup (on your Mac)
@@ -31,7 +32,8 @@ is meant to be confirmed against live order flow in Bookmap.
 
 ## Day to day
 
-- Click **Trading Prep** in the Dock.
+- Click **Trading Prep** in the Dock. It opens to the last generated sheets
+  (marked "Not from today" if they're stale); click **Refresh Prep** for new ones.
 - To update to the latest code: `bash scripts/service/update-and-rebuild.sh`
   (pulls, rebuilds, restarts the server, rebuilds the app).
 - To remove the background service: `bash scripts/service/uninstall-service.sh`.
