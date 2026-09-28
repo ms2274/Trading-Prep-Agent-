@@ -1,58 +1,27 @@
 import { getDirectionsProvider } from "./directions";
-import { haversineMiles } from "./geo";
+import { mockEnrichmentFor } from "./enrichment";
 import { getPlacesProvider } from "./places";
-import { FormInput, Itinerary, ItineraryStop, Leg, Venue } from "./types";
+import { formatClock, recomputeItineraryTotals } from "./timeline";
+import {
+  FormInput,
+  Itinerary,
+  ItineraryStop,
+  Leg,
+  StopCategory,
+  SwapAlternative,
+  Venue,
+} from "./types";
 import { CATEGORY_LABELS, TIME_OF_DAY_SEQUENCES } from "./vibeMappings";
 
-const CANDIDATES_PER_CATEGORY = 5;
+const CANDIDATES_PER_CATEGORY = 6;
 
-const STOP_DURATION_MINUTES: Record<Venue["category"], number> = {
+const STOP_DURATION_MINUTES: Record<StopCategory, number> = {
   coffee: 30,
   lunch: 45,
   dinner: 80,
   drinks: 50,
   activity: 65,
   dessert: 30,
-};
-
-// [low, high] per-person dollar estimate at each Google-style price level (1-4).
-const PRICE_RANGES: Record<Venue["category"], [number, number][]> = {
-  coffee: [
-    [6, 10],
-    [8, 14],
-    [12, 18],
-    [16, 25],
-  ],
-  lunch: [
-    [12, 18],
-    [18, 28],
-    [28, 45],
-    [45, 70],
-  ],
-  dinner: [
-    [20, 30],
-    [30, 55],
-    [55, 90],
-    [90, 150],
-  ],
-  drinks: [
-    [10, 15],
-    [15, 25],
-    [25, 40],
-    [40, 65],
-  ],
-  activity: [
-    [0, 15],
-    [15, 30],
-    [30, 50],
-    [50, 90],
-  ],
-  dessert: [
-    [5, 9],
-    [8, 14],
-    [12, 20],
-    [18, 30],
-  ],
 };
 
 const TIME_OF_DAY_START_HOUR: Record<FormInput["timeOfDay"], number> = {
@@ -62,167 +31,176 @@ const TIME_OF_DAY_START_HOUR: Record<FormInput["timeOfDay"], number> = {
   night: 20,
 };
 
-function formatClock(totalMinutesFromMidnight: number): string {
-  const hour24 = Math.floor(totalMinutesFromMidnight / 60) % 24;
-  const minute = totalMinutesFromMidnight % 60;
-  const period = hour24 >= 12 ? "PM" : "AM";
-  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
-  return `${hour12}:${minute.toString().padStart(2, "0")} ${period}`;
+function categoriesFor(input: FormInput): StopCategory[] {
+  return TIME_OF_DAY_SEQUENCES[input.timeOfDay].slice(0, input.stopCount);
 }
 
-function cartesianProduct<T>(lists: T[][]): T[][] {
-  return lists.reduce<T[][]>(
-    (acc, list) => acc.flatMap((combo) => list.map((item) => [...combo, item])),
-    [[]]
-  );
+async function fetchCandidates(input: FormInput, category: StopCategory): Promise<Venue[]> {
+  const provider = getPlacesProvider();
+  return provider.search({
+    category,
+    neighborhood: input.neighborhood,
+    vibe: input.vibe,
+    budget: input.budget,
+    limit: CANDIDATES_PER_CATEGORY,
+  });
 }
 
-function comboStraightLineMiles(combo: Venue[]): number {
-  let total = 0;
-  for (let i = 0; i < combo.length - 1; i++) {
-    total += haversineMiles(combo[i].lat, combo[i].lng, combo[i + 1].lat, combo[i + 1].lng);
-  }
-  return total;
-}
-
-function comboAvgRating(combo: Venue[]): number {
-  return combo.reduce((sum, v) => sum + v.rating, 0) / combo.length;
-}
-
-function comboKey(combo: Venue[]): string {
-  return combo.map((v) => v.id).join("|");
-}
-
-async function buildItinerary(
-  id: string,
-  title: string,
-  tagline: string,
-  combo: Venue[],
-  input: FormInput
-): Promise<Itinerary> {
-  const directionsProvider = getDirectionsProvider();
+async function computeLegs(venues: Venue[], input: FormInput): Promise<Leg[]> {
+  const directions = getDirectionsProvider();
   const legs: Leg[] = [];
-  for (let i = 0; i < combo.length - 1; i++) {
-    const { distanceMiles, durationMinutes } = await directionsProvider.route(
-      combo[i],
-      combo[i + 1],
+  for (let i = 0; i < venues.length - 1; i++) {
+    const { distanceMiles, durationMinutes } = await directions.route(
+      venues[i],
+      venues[i + 1],
       input.transportMode
     );
     legs.push({
-      fromVenueId: combo[i].id,
-      toVenueId: combo[i + 1].id,
+      fromVenueId: venues[i].id,
+      toVenueId: venues[i + 1].id,
       distanceMiles,
       durationMinutes,
       mode: input.transportMode,
     });
   }
-
-  const stops: ItineraryStop[] = [];
-  let clockMinutes = TIME_OF_DAY_START_HOUR[input.timeOfDay] * 60;
-  for (let i = 0; i < combo.length; i++) {
-    const venue = combo[i];
-    stops.push({
-      venue,
-      startLabel: formatClock(clockMinutes),
-      durationMinutes: STOP_DURATION_MINUTES[venue.category],
-    });
-    clockMinutes += STOP_DURATION_MINUTES[venue.category];
-    if (i < legs.length) clockMinutes += legs[i].durationMinutes;
-  }
-
-  const estCostLow = combo.reduce((sum, v) => sum + PRICE_RANGES[v.category][v.priceLevel - 1][0], 0);
-  const estCostHigh = combo.reduce((sum, v) => sum + PRICE_RANGES[v.category][v.priceLevel - 1][1], 0);
-  const travelMinutes = legs.reduce((sum, l) => sum + l.durationMinutes, 0);
-  const travelMiles = Math.round(legs.reduce((sum, l) => sum + l.distanceMiles, 0) * 100) / 100;
-  const stopMinutes = combo.reduce((sum, v) => sum + STOP_DURATION_MINUTES[v.category], 0);
-
-  return {
-    id,
-    title,
-    tagline,
-    stops,
-    legs,
-    totals: {
-      estCostLow,
-      estCostHigh,
-      totalMinutes: stopMinutes + travelMinutes,
-      travelMinutes,
-      travelMiles,
-      avgRating: Math.round(comboAvgRating(combo) * 10) / 10,
-    },
-  };
+  return legs;
 }
 
-export async function generateItineraries(input: FormInput): Promise<Itinerary[]> {
-  const categories = TIME_OF_DAY_SEQUENCES[input.timeOfDay].slice(0, input.stopCount);
-  const placesProvider = getPlacesProvider();
+function buildStops(venues: Venue[], legs: Leg[], input: FormInput): ItineraryStop[] {
+  let clock = TIME_OF_DAY_START_HOUR[input.timeOfDay] * 60;
+  const stops: ItineraryStop[] = [];
+  for (let i = 0; i < venues.length; i++) {
+    const venue = venues[i];
+    const durationMinutes = STOP_DURATION_MINUTES[venue.category];
+    stops.push({
+      venue,
+      category: venue.category,
+      enrichment: mockEnrichmentFor(venue, input),
+      startLabel: formatClock(clock),
+      durationMinutes,
+    });
+    clock += durationMinutes;
+    if (i < legs.length) clock += legs[i].durationMinutes;
+  }
+  return stops;
+}
 
-  const candidateLists = await Promise.all(
-    categories.map((category) =>
-      placesProvider.search({
-        category,
-        neighborhood: input.neighborhood,
-        vibe: input.vibe,
-        budget: input.budget,
-        limit: CANDIDATES_PER_CATEGORY,
-      })
-    )
-  );
+export async function generatePrimaryItinerary(input: FormInput): Promise<Itinerary> {
+  const categories = categoriesFor(input);
 
-  // Guard against a category coming back empty (e.g. a very narrow neighborhood filter).
+  const candidateLists = await Promise.all(categories.map((c) => fetchCandidates(input, c)));
+
   candidateLists.forEach((list, i) => {
     if (list.length === 0) {
-      throw new Error(`No ${categories[i]} options found for these filters. Try "Anywhere in NYC" or a different vibe.`);
+      throw new Error(
+        `No ${categories[i]} options found for these filters. Try "Anywhere in NYC" or a different vibe.`
+      );
     }
   });
 
-  const allCombos = cartesianProduct(candidateLists);
-
-  const topPicksCombo = candidateLists.map((list) => list[0]);
-  const topPicksKey = comboKey(topPicksCombo);
-
-  // Prefer a distinct combo for each slot when the candidate pool allows it,
-  // so a narrow filter (e.g. one neighborhood) doesn't surface the same
-  // itinerary twice under different titles.
-  const distinctFromTopPicks = allCombos.filter((combo) => comboKey(combo) !== topPicksKey);
-
-  const easiestLogisticsCombo =
-    [...(distinctFromTopPicks.length > 0 ? distinctFromTopPicks : allCombos)].sort(
-      (a, b) => comboStraightLineMiles(a) - comboStraightLineMiles(b)
-    )[0] ?? topPicksCombo;
-
-  const usedKeys = new Set([topPicksKey, comboKey(easiestLogisticsCombo)]);
-  const distinctFromBoth = allCombos.filter((combo) => !usedKeys.has(comboKey(combo)));
-  const hiddenGemCombo =
-    [...(distinctFromBoth.length > 0 ? distinctFromBoth : distinctFromTopPicks)].sort(
-      (a, b) => comboAvgRating(b) - comboAvgRating(a)
-    )[0] ?? topPicksCombo;
+  // Primary plan = highest-scoring candidate for each slot. Provider already
+  // sorted by rating + vibe match, so slot[0] is the pick.
+  const primaryVenues = candidateLists.map((list) => list[0]);
+  const legs = await computeLegs(primaryVenues, input);
+  const stops = buildStops(primaryVenues, legs, input);
+  const totals = recomputeItineraryTotals(stops, legs);
 
   const categoryLabel = categories.map((c) => CATEGORY_LABELS[c]).join(" → ");
 
-  const itineraries = await Promise.all([
-    buildItinerary(
-      "top-picks",
-      "Top Picks",
-      `The highest-rated ${input.vibe} spot in each stop: ${categoryLabel}.`,
-      topPicksCombo,
-      input
-    ),
-    buildItinerary(
-      "easiest-logistics",
-      "Easiest to Get Between",
-      "Same vibe, minimal travel time — everything clusters close together.",
-      easiestLogisticsCombo,
-      input
-    ),
-    buildItinerary(
-      "hidden-gems",
-      "Something a Little Different",
-      "A different combination worth considering — great ratings, fresh options.",
-      hiddenGemCombo,
-      input
-    ),
-  ]);
+  return {
+    id: `plan-${Date.now()}`,
+    title: "Your night out",
+    tagline: categoryLabel,
+    stops,
+    legs,
+    totals,
+    meta: { input },
+  };
+}
 
-  return itineraries;
+export async function generateSwapAlternatives(
+  itinerary: Itinerary,
+  stopIndex: number
+): Promise<SwapAlternative[]> {
+  const input = itinerary.meta.input;
+  const currentCategory = itinerary.stops[stopIndex].category;
+  const excludedIds = new Set(itinerary.stops.map((s) => s.venue.id));
+
+  const candidates = (await fetchCandidates(input, currentCategory)).filter(
+    (v) => !excludedIds.has(v.id)
+  );
+
+  const picks = candidates.slice(0, 3);
+  if (picks.length === 0) return [];
+
+  const directions = getDirectionsProvider();
+  const prevVenue = stopIndex > 0 ? itinerary.stops[stopIndex - 1].venue : null;
+  const nextVenue =
+    stopIndex < itinerary.stops.length - 1 ? itinerary.stops[stopIndex + 1].venue : null;
+
+  return Promise.all(
+    picks.map(async (venue): Promise<SwapAlternative> => {
+      const legFromPrev = prevVenue
+        ? {
+            fromVenueId: prevVenue.id,
+            toVenueId: venue.id,
+            ...(await directions.route(prevVenue, venue, input.transportMode)),
+            mode: input.transportMode,
+          }
+        : undefined;
+      const legToNext = nextVenue
+        ? {
+            fromVenueId: venue.id,
+            toVenueId: nextVenue.id,
+            ...(await directions.route(venue, nextVenue, input.transportMode)),
+            mode: input.transportMode,
+          }
+        : undefined;
+      return {
+        venue,
+        enrichment: mockEnrichmentFor(venue, input),
+        durationMinutes: STOP_DURATION_MINUTES[venue.category],
+        legFromPrev,
+        legToNext,
+      };
+    })
+  );
+}
+
+export function applySwap(
+  itinerary: Itinerary,
+  stopIndex: number,
+  alt: SwapAlternative
+): Itinerary {
+  const newStops = [...itinerary.stops];
+  const newLegs = [...itinerary.legs];
+
+  newStops[stopIndex] = {
+    venue: alt.venue,
+    category: alt.venue.category,
+    enrichment: alt.enrichment,
+    startLabel: newStops[stopIndex].startLabel, // placeholder, recomputed below
+    durationMinutes: alt.durationMinutes,
+  };
+
+  if (alt.legFromPrev && stopIndex > 0) newLegs[stopIndex - 1] = alt.legFromPrev;
+  if (alt.legToNext && stopIndex < newLegs.length) newLegs[stopIndex] = alt.legToNext;
+
+  // Re-run start labels through the timeline.
+  let clock = TIME_OF_DAY_START_HOUR[itinerary.meta.input.timeOfDay] * 60;
+  const relabeled = newStops.map((s, i) => {
+    const withLabel: ItineraryStop = { ...s, startLabel: formatClock(clock) };
+    clock += s.durationMinutes;
+    if (i < newLegs.length) clock += newLegs[i].durationMinutes;
+    return withLabel;
+  });
+
+  const totals = recomputeItineraryTotals(relabeled, newLegs);
+
+  return {
+    ...itinerary,
+    stops: relabeled,
+    legs: newLegs,
+    totals,
+  };
 }

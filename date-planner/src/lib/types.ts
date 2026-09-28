@@ -44,6 +44,7 @@ export interface Venue {
   vibeTags: Vibe[];
   description: string;
   address: string;
+  photos?: string[];
 }
 
 export interface FormInput {
@@ -63,8 +64,15 @@ export interface Leg {
   mode: TransportMode;
 }
 
+export interface StopEnrichment {
+  whyPicked: string;
+  vibeTags: string[];
+}
+
 export interface ItineraryStop {
   venue: Venue;
+  category: StopCategory;
+  enrichment: StopEnrichment;
   startLabel: string;
   durationMinutes: number;
 }
@@ -83,9 +91,33 @@ export interface Itinerary {
     travelMiles: number;
     avgRating: number;
   };
+  meta: {
+    input: FormInput;
+  };
 }
 
+export type PlanSource = "mock" | "live" | "ai";
+
 export interface PlanResponse {
-  itineraries: Itinerary[];
-  source: "mock" | "live";
+  itinerary: Itinerary;
+  source: PlanSource;
+}
+
+export interface SwapAlternative {
+  venue: Venue;
+  enrichment: StopEnrichment;
+  durationMinutes: number;
+  legFromPrev?: Leg;
+  legToNext?: Leg;
+}
+
+export interface SwapRequest {
+  itinerary: Itinerary;
+  stopIndex: number;
+}
+
+export interface SwapResponse {
+  stopIndex: number;
+  alternatives: SwapAlternative[];
+  source: PlanSource;
 }

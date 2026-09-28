@@ -2,32 +2,43 @@
 
 import { GoogleMap, Marker, Polyline, useJsApiLoader } from "@react-google-maps/api";
 import { Itinerary } from "@/lib/types";
-import { ITINERARY_COLORS } from "@/lib/theme";
-import { useColorScheme } from "@/lib/useColorScheme";
 
 const MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
-export default function RouteMap({ itinerary }: { itinerary: Itinerary }) {
-  const scheme = useColorScheme();
-  const color = ITINERARY_COLORS[itinerary.id]?.[scheme] ?? "#2a78d6";
+const DARK_MAP_STYLE = [
+  { elementType: "geometry", stylers: [{ color: "#161210" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#0a0806" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#8a7c6d" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#2a1f18" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#3a2b20" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0d1418" }] },
+  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#5c4d3e" }] },
+];
 
+function MapPlaceholder() {
+  return (
+    <div className="warm-card rounded-2xl p-5 text-center text-sm text-[color:var(--color-ink-muted)]">
+      <div className="text-xs uppercase tracking-wider text-[color:var(--color-ink-dim)] mb-1">
+        Map preview
+      </div>
+      Add{" "}
+      <code className="mx-1 px-1.5 py-0.5 rounded bg-black/30 text-[color:var(--color-accent)] text-[11px]">
+        NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+      </code>{" "}
+      to your <code className="mx-1 text-[color:var(--color-ink)]">.env.local</code> to see the route on a live map.
+    </div>
+  );
+}
+
+function LiveMap({ itinerary, apiKey }: { itinerary: Itinerary; apiKey: string }) {
   const { isLoaded } = useJsApiLoader({
-    googleMapsApiKey: MAPS_API_KEY ?? "",
+    googleMapsApiKey: apiKey,
     id: "date-planner-google-map-script",
   });
 
-  if (!MAPS_API_KEY) {
-    return (
-      <div className="rounded-2xl border border-dashed border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-900/40 p-6 text-center text-sm text-neutral-500 dark:text-neutral-400">
-        Add a <code className="px-1 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800">NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code>{" "}
-        to see this route on an interactive map.
-      </div>
-    );
-  }
-
   if (!isLoaded) {
     return (
-      <div className="rounded-2xl border border-neutral-200 dark:border-neutral-800 h-72 flex items-center justify-center text-sm text-neutral-400">
+      <div className="rounded-2xl warm-card h-56 flex items-center justify-center text-sm text-[color:var(--color-ink-dim)]">
         Loading map…
       </div>
     );
@@ -43,28 +54,30 @@ export default function RouteMap({ itinerary }: { itinerary: Itinerary }) {
     }),
     { minLat: 90, maxLat: -90, minLng: 180, maxLng: -180 }
   );
-  const center = {
-    lat: (bounds.minLat + bounds.maxLat) / 2,
-    lng: (bounds.minLng + bounds.maxLng) / 2,
-  };
+  const center = { lat: (bounds.minLat + bounds.maxLat) / 2, lng: (bounds.minLng + bounds.maxLng) / 2 };
 
   return (
-    <div className="rounded-2xl overflow-hidden border border-neutral-200 dark:border-neutral-800">
+    <div className="rounded-2xl overflow-hidden warm-card">
       <GoogleMap
-        mapContainerStyle={{ width: "100%", height: "18rem" }}
+        mapContainerStyle={{ width: "100%", height: "16rem" }}
         center={center}
         zoom={14}
-        options={{ disableDefaultUI: true, zoomControl: true }}
+        options={{ disableDefaultUI: true, zoomControl: true, styles: DARK_MAP_STYLE }}
       >
-        <Polyline path={path} options={{ strokeColor: color, strokeWeight: 3 }} />
+        <Polyline path={path} options={{ strokeColor: "#f7a13c", strokeWeight: 3 }} />
         {itinerary.stops.map((stop, i) => (
           <Marker
-            key={stop.venue.id}
+            key={stop.venue.id + i}
             position={{ lat: stop.venue.lat, lng: stop.venue.lng }}
-            label={{ text: String(i + 1), color: "white" }}
+            label={{ text: String(i + 1), color: "#160a02", fontWeight: "700" }}
           />
         ))}
       </GoogleMap>
     </div>
   );
+}
+
+export default function RouteMap({ itinerary }: { itinerary: Itinerary }) {
+  if (!MAPS_API_KEY) return <MapPlaceholder />;
+  return <LiveMap itinerary={itinerary} apiKey={MAPS_API_KEY} />;
 }

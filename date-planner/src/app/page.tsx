@@ -2,22 +2,30 @@
 
 import { useState } from "react";
 import DateForm from "@/components/DateForm";
-import ItineraryCard from "@/components/ItineraryCard";
-import ItineraryDetail from "@/components/ItineraryDetail";
-import ComparisonView from "@/components/ComparisonView";
-import { FormInput, Itinerary } from "@/lib/types";
+import RouteMap from "@/components/RouteMap";
+import StopCard from "@/components/StopCard";
+import SwapSheet from "@/components/SwapSheet";
+import { applySwap } from "@/lib/itinerary";
+import { FormInput, Itinerary, PlanSource, StopCategory, SwapAlternative } from "@/lib/types";
 
 type ViewState =
   | { status: "form" }
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "results"; itineraries: Itinerary[]; source: "mock" | "live"; selectedId: string };
+  | { status: "results"; itinerary: Itinerary; source: PlanSource };
+
+interface SwapState {
+  stopIndex: number;
+  category: StopCategory;
+  alternatives: SwapAlternative[] | null; // null while fetching
+}
 
 export default function Home() {
   const [state, setState] = useState<ViewState>({ status: "form" });
-  const [showComparison, setShowComparison] = useState(false);
+  const [showMap, setShowMap] = useState(false);
+  const [swap, setSwap] = useState<SwapState | null>(null);
 
-  async function handleSubmit(input: FormInput) {
+  async function handleGenerate(input: FormInput) {
     setState({ status: "loading" });
     try {
       const res = await fetch("/api/plan", {
@@ -27,83 +35,156 @@ export default function Home() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Something went wrong.");
-      setState({
-        status: "results",
-        itineraries: data.itineraries,
-        source: data.source,
-        selectedId: data.itineraries[0].id,
-      });
-      setShowComparison(false);
+      setState({ status: "results", itinerary: data.itinerary, source: data.source });
+      setShowMap(false);
     } catch (err) {
       setState({ status: "error", message: err instanceof Error ? err.message : "Something went wrong." });
     }
   }
 
+  async function openSwap(stopIndex: number) {
+    if (state.status !== "results") return;
+    const category = state.itinerary.stops[stopIndex].category;
+    setSwap({ stopIndex, category, alternatives: null });
+    try {
+      const res = await fetch("/api/swap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itinerary: state.itinerary, stopIndex }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to load alternatives.");
+      setSwap({ stopIndex, category, alternatives: data.alternatives });
+    } catch {
+      setSwap({ stopIndex, category, alternatives: [] });
+    }
+  }
+
+  function pickSwap(alt: SwapAlternative) {
+    if (state.status !== "results" || !swap) return;
+    const updated = applySwap(state.itinerary, swap.stopIndex, alt);
+    setState({ ...state, itinerary: updated });
+    setSwap(null);
+  }
+
   return (
-    <main className="flex-1 bg-neutral-50 dark:bg-neutral-950">
-      <div className="mx-auto max-w-3xl px-4 py-10 sm:py-16">
-        <header className="mb-10 text-center">
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
-            Plan a great date in NYC 🗽
-          </h1>
-          <p className="mt-2 text-neutral-500 dark:text-neutral-400">
-            Tell it the vibe, get a few complete, logistics-solved options side by side.
-          </p>
-        </header>
-
+    <main className="flex-1">
+      <div className="mx-auto max-w-lg px-4 pt-8 pb-24 sm:pt-14">
         {state.status !== "results" && (
-          <div className="rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-sm p-6 sm:p-8">
-            <DateForm onSubmit={handleSubmit} submitting={state.status === "loading"} />
-          </div>
-        )}
+          <>
+            <header className="mb-8">
+              <div className="text-[11px] uppercase tracking-widest text-[color:var(--color-accent)] mb-2">
+                Date Night · NYC
+              </div>
+              <h1 className="text-3xl sm:text-4xl font-semibold leading-tight text-[color:var(--color-ink)]">
+                Plan the whole night <br className="hidden sm:block" />
+                <span className="text-[color:var(--color-ink-muted)]">in about a minute.</span>
+              </h1>
+              <p className="mt-3 text-sm text-[color:var(--color-ink-muted)]">
+                Tell it the vibe. It builds the itinerary, hands you rich cards for each stop, and lets you swap any one you don&apos;t love.
+              </p>
+            </header>
 
-        {state.status === "error" && (
-          <p className="mt-4 text-center text-sm text-red-600 dark:text-red-400">{state.message}</p>
+            <div className="warm-card rounded-3xl p-6">
+              <DateForm onSubmit={handleGenerate} submitting={state.status === "loading"} />
+            </div>
+
+            {state.status === "error" && (
+              <p className="mt-4 text-center text-sm text-[color:var(--color-rose)]">{state.message}</p>
+            )}
+          </>
         )}
 
         {state.status === "results" && (
-          <div className="space-y-6">
-            {state.source === "mock" && (
-              <p className="text-center text-xs text-neutral-400 bg-neutral-100 dark:bg-neutral-900 rounded-full px-3 py-1.5 inline-block mx-auto">
-                Showing sample demo venues &mdash; add a Google Places API key for live results.{" "}
-                <span className="block sm:inline">See the README for setup.</span>
-              </p>
-            )}
-
-            <div className="flex items-center justify-between">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between mb-2">
               <button
                 onClick={() => setState({ status: "form" })}
-                className="text-sm font-medium text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200"
+                className="text-sm text-[color:var(--color-ink-muted)] hover:text-[color:var(--color-ink)]"
               >
                 ← Start over
               </button>
               <button
-                onClick={() => setShowComparison((v) => !v)}
-                className="text-sm font-medium rounded-full border border-neutral-300 dark:border-neutral-700 px-4 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-300"
+                onClick={() => setShowMap((v) => !v)}
+                className="text-sm font-medium rounded-full border border-[color:var(--color-border)] px-4 py-1.5 text-[color:var(--color-ink-muted)] hover:text-[color:var(--color-ink)] hover:border-[color:var(--color-border-strong)] transition"
               >
-                {showComparison ? "Hide comparison" : "Compare all options"}
+                {showMap ? "Hide map" : "Show map"}
               </button>
             </div>
 
-            {showComparison && <ComparisonView itineraries={state.itineraries} />}
+            <SummaryBar itinerary={state.itinerary} source={state.source} />
 
-            <div className="grid gap-4 sm:grid-cols-3">
-              {state.itineraries.map((it) => (
-                <ItineraryCard
-                  key={it.id}
-                  itinerary={it}
-                  selected={it.id === state.selectedId}
-                  onSelect={() => setState({ ...state, selectedId: it.id })}
+            {showMap && <RouteMap itinerary={state.itinerary} />}
+
+            <div className="space-y-1">
+              {state.itinerary.stops.map((stop, i) => (
+                <StopCard
+                  key={`${stop.venue.id}-${i}`}
+                  stop={stop}
+                  stopIndex={i}
+                  totalStops={state.itinerary.stops.length}
+                  legFromPrev={i > 0 ? state.itinerary.legs[i - 1] : undefined}
+                  onSwap={() => openSwap(i)}
+                  swapping={swap?.stopIndex === i && swap.alternatives === null}
                 />
               ))}
-            </div>
-
-            <div className="rounded-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-sm p-6 sm:p-8">
-              <ItineraryDetail itinerary={state.itineraries.find((it) => it.id === state.selectedId)!} />
             </div>
           </div>
         )}
       </div>
+
+      <SwapSheet
+        open={swap !== null}
+        onClose={() => setSwap(null)}
+        alternatives={swap?.alternatives ?? null}
+        category={swap?.category ?? null}
+        onPick={pickSwap}
+      />
     </main>
+  );
+}
+
+function SummaryBar({ itinerary, source }: { itinerary: Itinerary; source: PlanSource }) {
+  const t = itinerary.totals;
+  const hours = (t.totalMinutes / 60).toFixed(1);
+
+  return (
+    <div className="warm-card rounded-2xl p-4">
+      {source === "mock" && (
+        <div className="text-[10px] uppercase tracking-widest text-[color:var(--color-ink-dim)] mb-2">
+          Demo mode · using sample NYC venues
+        </div>
+      )}
+      <div className="flex items-baseline justify-between gap-2">
+        <div>
+          <h2 className="text-xl font-semibold text-[color:var(--color-ink)]">Your night out</h2>
+          <div className="text-xs text-[color:var(--color-ink-muted)] mt-0.5">{itinerary.tagline}</div>
+        </div>
+      </div>
+      <div className="grid grid-cols-4 gap-3 mt-4 pt-4 border-t border-[color:var(--color-border)]">
+        <SummaryStat label="cost" value={`$${t.estCostLow}–${t.estCostHigh}`} />
+        <SummaryStat label="time" value={`${hours}h`} />
+        <SummaryStat label="travel" value={`${t.travelMiles}mi`} />
+        <SummaryStat label="rating" value={`${t.avgRating.toFixed(1)}★`} accent />
+      </div>
+    </div>
+  );
+}
+
+function SummaryStat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className="text-center">
+      <div
+        className={
+          "text-sm font-semibold tabular-nums " +
+          (accent ? "text-[color:var(--color-gold)]" : "text-[color:var(--color-ink)]")
+        }
+      >
+        {value}
+      </div>
+      <div className="text-[10px] uppercase tracking-wider text-[color:var(--color-ink-dim)] mt-0.5">
+        {label}
+      </div>
+    </div>
   );
 }

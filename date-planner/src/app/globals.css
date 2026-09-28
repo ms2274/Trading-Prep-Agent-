@@ -1,26 +1,71 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg: #0a0806;
+  --color-surface: #17110d;
+  --color-surface-elevated: #1f1712;
+  --color-border: #2b2018;
+  --color-border-strong: #3a2b21;
+  --color-ink: #f8f0e6;
+  --color-ink-muted: #b6a591;
+  --color-ink-dim: #7c6c5b;
+  --color-accent: #f7a13c;
+  --color-accent-strong: #f97316;
+  --color-rose: #f43f5e;
+  --color-gold: #f5c249;
+  --color-good: #4ade80;
+
+  --font-sans: ui-sans-serif, -apple-system, "SF Pro Text", "Segoe UI", "Helvetica Neue", Arial,
+    sans-serif;
+  --font-display: ui-sans-serif, -apple-system, "SF Pro Display", "Segoe UI", "Helvetica Neue",
+    Arial, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  color-scheme: dark;
 }
 
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Warm ambient glow that sits behind the page — very subtle sunset. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(1200px 500px at 50% -100px, rgba(247, 161, 60, 0.09), transparent 60%),
+    radial-gradient(800px 400px at 100% 100%, rgba(244, 63, 94, 0.06), transparent 70%);
+  z-index: 0;
+}
+
+/* Utility: subtle card border + inner highlight for that "warm surface" feel. */
+.warm-card {
+  background: linear-gradient(180deg, var(--color-surface-elevated) 0%, var(--color-surface) 100%);
+  border: 1px solid var(--color-border);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 10px 30px -12px rgba(0, 0, 0, 0.5);
+}
+
+.accent-ring {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 0 0 1px rgba(247, 161, 60, 0.35),
+    0 10px 30px -12px rgba(247, 161, 60, 0.25);
+}
+
+/* Scrollbar polish for horizontal photo carousels. */
+.scrollbar-hidden {
+  scrollbar-width: none;
+}
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
 }
