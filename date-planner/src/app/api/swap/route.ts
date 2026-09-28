@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { hasAnthropicKey } from "@/lib/ai";
 import { generateSwapAlternatives } from "@/lib/itinerary";
 import { isLiveMode } from "@/lib/places";
-import { SwapRequest, SwapResponse } from "@/lib/types";
+import { PlanResponse, SwapRequest, SwapResponse } from "@/lib/types";
+
+function sourceLabel(): PlanResponse["source"] {
+  if (isLiveMode()) return "live";
+  if (hasAnthropicKey()) return "ai";
+  return "mock";
+}
 
 export async function POST(request: NextRequest) {
   const body = (await request.json()) as SwapRequest;
@@ -11,7 +18,7 @@ export async function POST(request: NextRequest) {
     const response: SwapResponse = {
       stopIndex: body.stopIndex,
       alternatives,
-      source: isLiveMode() ? "live" : "mock",
+      source: sourceLabel(),
     };
     return NextResponse.json(response);
   } catch (err) {

@@ -144,17 +144,27 @@ export default function Home() {
   );
 }
 
+function SourceBadge({ source }: { source: PlanSource }) {
+  const label =
+    source === "live"
+      ? "Live NYC venues"
+      : source === "ai"
+        ? "AI-written picks · sample venues"
+        : "Demo mode · sample venues";
+  return (
+    <div className="text-[10px] uppercase tracking-widest text-[color:var(--color-ink-dim)] mb-2">
+      {label}
+    </div>
+  );
+}
+
 function SummaryBar({ itinerary, source }: { itinerary: Itinerary; source: PlanSource }) {
   const t = itinerary.totals;
   const hours = (t.totalMinutes / 60).toFixed(1);
 
   return (
     <div className="warm-card rounded-2xl p-4">
-      {source === "mock" && (
-        <div className="text-[10px] uppercase tracking-widest text-[color:var(--color-ink-dim)] mb-2">
-          Demo mode · using sample NYC venues
-        </div>
-      )}
+      <SourceBadge source={source} />
       <div className="flex items-baseline justify-between gap-2">
         <div>
           <h2 className="text-xl font-semibold text-[color:var(--color-ink)]">Your night out</h2>

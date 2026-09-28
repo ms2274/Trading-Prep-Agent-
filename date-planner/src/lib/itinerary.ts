@@ -1,3 +1,4 @@
+import { enrichVenuesWithAI } from "./ai";
 import { getDirectionsProvider } from "./directions";
 import { mockEnrichmentFor } from "./enrichment";
 import { getPlacesProvider } from "./places";
@@ -8,6 +9,7 @@ import {
   ItineraryStop,
   Leg,
   StopCategory,
+  StopEnrichment,
   SwapAlternative,
   Venue,
 } from "./types";
@@ -66,7 +68,12 @@ async function computeLegs(venues: Venue[], input: FormInput): Promise<Leg[]> {
   return legs;
 }
 
-function buildStops(venues: Venue[], legs: Leg[], input: FormInput): ItineraryStop[] {
+function buildStops(
+  venues: Venue[],
+  legs: Leg[],
+  input: FormInput,
+  enrichments: Map<string, StopEnrichment>
+): ItineraryStop[] {
   let clock = TIME_OF_DAY_START_HOUR[input.timeOfDay] * 60;
   const stops: ItineraryStop[] = [];
   for (let i = 0; i < venues.length; i++) {
@@ -75,7 +82,7 @@ function buildStops(venues: Venue[], legs: Leg[], input: FormInput): ItinerarySt
     stops.push({
       venue,
       category: venue.category,
-      enrichment: mockEnrichmentFor(venue, input),
+      enrichment: enrichments.get(venue.id) ?? mockEnrichmentFor(venue, input),
       startLabel: formatClock(clock),
       durationMinutes,
     });
@@ -101,8 +108,11 @@ export async function generatePrimaryItinerary(input: FormInput): Promise<Itiner
   // Primary plan = highest-scoring candidate for each slot. Provider already
   // sorted by rating + vibe match, so slot[0] is the pick.
   const primaryVenues = candidateLists.map((list) => list[0]);
-  const legs = await computeLegs(primaryVenues, input);
-  const stops = buildStops(primaryVenues, legs, input);
+  const [legs, enrichments] = await Promise.all([
+    computeLegs(primaryVenues, input),
+    enrichVenuesWithAI(input, primaryVenues),
+  ]);
+  const stops = buildStops(primaryVenues, legs, input, enrichments);
   const totals = recomputeItineraryTotals(stops, legs);
 
   const categoryLabel = categories.map((c) => CATEGORY_LABELS[c]).join(" → ");
@@ -138,31 +148,38 @@ export async function generateSwapAlternatives(
   const nextVenue =
     stopIndex < itinerary.stops.length - 1 ? itinerary.stops[stopIndex + 1].venue : null;
 
-  return Promise.all(
-    picks.map(async (venue): Promise<SwapAlternative> => {
-      const legFromPrev = prevVenue
-        ? {
-            fromVenueId: prevVenue.id,
-            toVenueId: venue.id,
-            ...(await directions.route(prevVenue, venue, input.transportMode)),
-            mode: input.transportMode,
-          }
-        : undefined;
-      const legToNext = nextVenue
-        ? {
-            fromVenueId: venue.id,
-            toVenueId: nextVenue.id,
-            ...(await directions.route(venue, nextVenue, input.transportMode)),
-            mode: input.transportMode,
-          }
-        : undefined;
-      return {
-        venue,
-        enrichment: mockEnrichmentFor(venue, input),
-        durationMinutes: STOP_DURATION_MINUTES[venue.category],
-        legFromPrev,
-        legToNext,
-      };
+  const [legPairs, enrichments] = await Promise.all([
+    Promise.all(
+      picks.map(async (venue) => {
+        const legFromPrev = prevVenue
+          ? {
+              fromVenueId: prevVenue.id,
+              toVenueId: venue.id,
+              ...(await directions.route(prevVenue, venue, input.transportMode)),
+              mode: input.transportMode,
+            }
+          : undefined;
+        const legToNext = nextVenue
+          ? {
+              fromVenueId: venue.id,
+              toVenueId: nextVenue.id,
+              ...(await directions.route(venue, nextVenue, input.transportMode)),
+              mode: input.transportMode,
+            }
+          : undefined;
+        return { legFromPrev, legToNext };
+      })
+    ),
+    enrichVenuesWithAI(input, picks),
+  ]);
+
+  return picks.map(
+    (venue, i): SwapAlternative => ({
+      venue,
+      enrichment: enrichments.get(venue.id) ?? mockEnrichmentFor(venue, input),
+      durationMinutes: STOP_DURATION_MINUTES[venue.category],
+      legFromPrev: legPairs[i].legFromPrev,
+      legToNext: legPairs[i].legToNext,
     })
   );
 }
